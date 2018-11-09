@@ -1,4 +1,4 @@
-/* 
+/*
     This file is part of tgl-library
 
     This library is free software; you can redistribute it and/or
@@ -40,6 +40,7 @@
 
 #include "tgl.h"
 #include "tgl-inner.h"
+
 /* DH key exchange protocol data structures */
 #define	CODE_req_pq			0x60469778
 #define CODE_resPQ			0x05162463
@@ -53,7 +54,7 @@
 #define CODE_client_DH_inner_data	0x6643b654
 #define CODE_dh_gen_ok			0x3bcbf734
 #define CODE_dh_gen_retry		0x46dc1fb9
-#define CODE_dh_gen_fail		0xa69dae02 
+#define CODE_dh_gen_fail		0xa69dae02
 
 #define CODE_bind_auth_key_inner 0x75a3f765
 
@@ -97,6 +98,7 @@
 #define CODE_msg_new_detailed_info 0x809db6df
 
 #define CODE_msg_detailed_info 0x276d3ec6
+
 /* not really a limit, for struct encrypted_message only */
 // #define MAX_MESSAGE_INTS	16384
 #define MAX_MESSAGE_INTS	1048576
@@ -190,11 +192,11 @@ extern int *tgl_in_ptr, *tgl_in_end;
 //void fetch_date (void);
 //void fetch_seq (void);
 static inline int prefetch_strlen (void) {
-  if (in_ptr >= in_end) { 
-    return -1; 
+  if (in_ptr >= in_end) {
+    return -1;
   }
   unsigned l = *in_ptr;
-  if ((l & 0xff) < 0xfe) { 
+  if ((l & 0xff) < 0xfe) {
     l &= 0xff;
     return (in_end >= in_ptr + (l >> 2) + 1) ? (int)l : -1;
   } else if ((l & 0xff) == 0xfe) {
@@ -216,7 +218,7 @@ static inline char *fetch_str (int len) {
     in_ptr += (len + 7) >> 2;
     return str;
   }
-} 
+}
 
 static inline char *fetch_str_dup (void) {
   int l = prefetch_strlen ();
@@ -344,7 +346,7 @@ static inline void fetch_ints (void *data, int count) {
   memcpy (data, in_ptr, 4 * count);
   in_ptr += count;
 }
-    
+
 static inline void fetch256 (void *buf) {
   int l = prefetch_strlen ();
   assert (l >= 0);

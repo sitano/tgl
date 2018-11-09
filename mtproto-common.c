@@ -1,4 +1,4 @@
-/* 
+/*
     This file is part of tgl-library
 
     This library is free software; you can redistribute it and/or
@@ -103,12 +103,11 @@ static int get_random_bytes (struct tgl_state *TLS, unsigned char *buf, int n) {
 		/* Crypto init */
 		CryptAcquireContextA(&hCryptoServiceProvider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT);
 	}
-	
+
 	if (!CryptGenRandom(hCryptoServiceProvider, n, buf)) {
 		return -1;
 	}
-    
-	
+
 	return n;
 }
 #endif
@@ -204,7 +203,7 @@ int tgl_serialize_bignum (TGLC_bn *b, char *buffer, int maxlen) {
 
 long long tgl_do_compute_rsa_key_fingerprint (TGLC_rsa *key) {
   static char tempbuff[4096];
-  static unsigned char sha[20]; 
+  static unsigned char sha[20];
   assert (TGLC_rsa_n (key) && TGLC_rsa_e (key));
   int l1 = tgl_serialize_bignum (TGLC_rsa_n (key), tempbuff, 4096);
   assert (l1 > 0);
@@ -392,7 +391,7 @@ void tgl_init_aes_auth (char auth_key[192], char msg_key[16], int encrypt) {
   memcpy (buffer + 16, auth_key + 96, 32);
   TGLC_sha1 (buffer, 48, hash);
   memcpy (aes_iv + 24, hash, 8);
-  
+
   if (encrypt) {
     TGLC_aes_set_encrypt_key (aes_key_raw, 32*8, &aes_key);
   } else {

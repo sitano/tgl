@@ -690,7 +690,7 @@ static void init_enc_msg (struct tgl_state *TLS, struct tgl_session *S, int usef
   struct tgl_dc *DC = S->dc;
   assert (DC->state == st_authorized);
   assert (DC->temp_auth_key_id);
-  vlogprintf (E_DEBUG, "temp_auth_key_id = 0x%016" INT64_PRINTF_MODIFIER "x, auth_key_id = 0x%016" INT64_PRINTF_MODIFIER "x\n", DC->temp_auth_key_id, DC->auth_key_id);
+  // vlogprintf (E_DEBUG, "temp_auth_key_id = 0x%016" INT64_PRINTF_MODIFIER "x, auth_key_id = 0x%016" INT64_PRINTF_MODIFIER "x\n", DC->temp_auth_key_id, DC->auth_key_id);
   enc_msg.auth_key_id = DC->temp_auth_key_id;
   enc_msg.server_salt = DC->server_salt;
   if (!S->session_id) {
@@ -722,7 +722,6 @@ static int aes_encrypt_message (struct tgl_state *TLS, char *key, struct encrypt
   int enc_len = (MINSZ - UNENCSZ) + enc->msg_len;
   assert (enc->msg_len >= 0 && enc->msg_len <= MAX_MESSAGE_INTS * 4 - 16 && !(enc->msg_len & 3));
   TGLC_sha1 ((unsigned char *) &enc->server_salt, enc_len, sha1_buffer);
-  vlogprintf (E_DEBUG, "sending message with sha1 %08x\n", *(int *)sha1_buffer);
   memcpy (enc->msg_key, sha1_buffer + 4, 16);
   tgl_init_aes_auth (key, enc->msg_key, 1);
   return tgl_pad_aes_encrypt ((char *) &enc->server_salt, enc_len, (char *) &enc->server_salt, MAX_MESSAGE_INTS * 4 + (MINSZ - UNENCSZ));
@@ -752,6 +751,11 @@ long long tglmp_encrypt_send_message (struct tgl_state *TLS, struct connection *
 
   int l = aes_encrypt_message (TLS, DC->temp_auth_key, &enc_msg);
   assert (l > 0);
+  {
+    char msg_code_buf[32] = {0};
+    tgl_code_to_str(msg_code_buf, 32, *msg);
+    vlogprintf (E_DEBUG, "<< sending type \"%s\"\n", msg_code_buf);
+  }
   rpc_send_message (TLS, c, &enc_msg, l + UNENCSZ);
 
   return S->last_msg_id;
@@ -782,7 +786,7 @@ int tglmp_encrypt_inner_temp (struct tgl_state *TLS, struct connection *c, int *
 static int rpc_execute_answer (struct tgl_state *TLS, struct connection *c, long long msg_id);
 
 static int work_container (struct tgl_state *TLS, struct connection *c, long long msg_id) {
-  vlogprintf (E_DEBUG, "work_container: msg_id = %" INT64_PRINTF_MODIFIER "d\n", msg_id);
+  vlogprintf (E_DEBUG, "  - work_container: msg_id = %" INT64_PRINTF_MODIFIER "d\n", msg_id);
   assert (fetch_int () == CODE_msg_container);
   int n = fetch_int ();
   int i;
@@ -808,7 +812,7 @@ static int work_new_session_created (struct tgl_state *TLS, struct connection *c
   struct tgl_session *S = TLS->net_methods->get_session (c);
   struct tgl_dc *DC = TLS->net_methods->get_dc (c);
   
-  vlogprintf (E_NOTICE, "work_new_session_created: msg_id = %" INT64_PRINTF_MODIFIER "d, dc = %d\n", msg_id, DC->id);
+  vlogprintf (E_NOTICE, "  - work_new_session_created: msg_id = %" INT64_PRINTF_MODIFIER "d, dc = %d\n", msg_id, DC->id);
   assert (fetch_int () == (int)CODE_new_session_created);
   fetch_long (); // first message id
   fetch_long (); // unique_id
@@ -823,7 +827,7 @@ static int work_new_session_created (struct tgl_state *TLS, struct connection *c
 }
 
 static int work_msgs_ack (struct tgl_state *TLS, struct connection *c, long long msg_id) {
-  vlogprintf (E_DEBUG, "work_msgs_ack: msg_id = %" INT64_PRINTF_MODIFIER "d\n", msg_id);
+  vlogprintf (E_DEBUG, "  - work_msgs_ack: msg_id = %" INT64_PRINTF_MODIFIER "d\n", msg_id);
   assert (fetch_int () == CODE_msgs_ack);
   assert (fetch_int () == CODE_vector);
   int n = fetch_int ();
@@ -837,7 +841,7 @@ static int work_msgs_ack (struct tgl_state *TLS, struct connection *c, long long
 }
 
 static int work_rpc_result (struct tgl_state *TLS, struct connection *c, long long msg_id) {
-  vlogprintf (E_DEBUG, "work_rpc_result: msg_id = %" INT64_PRINTF_MODIFIER "d\n", msg_id);
+  vlogprintf (E_DEBUG, "  - work_rpc_result: msg_id = %" INT64_PRINTF_MODIFIER "d\n", msg_id);
   assert (fetch_int () == (int)CODE_rpc_result);
   long long id = fetch_long ();
   int op = prefetch_int ();
@@ -1042,16 +1046,16 @@ static void fail_session (struct tgl_state *TLS, struct tgl_session *S) {
 static int process_rpc_message (struct tgl_state *TLS, struct connection *c, struct encrypted_message *enc, int len) {
   const int MINSZ = offsetof (struct encrypted_message, message);
   const int UNENCSZ = offsetof (struct encrypted_message, server_salt);
-  vlogprintf (E_DEBUG, "process_rpc_message(), len=%d\n", len);
+  // vlogprintf (E_DEBUG, ">> process_rpc_message(), len=%d, seq=%x\n", len, enc->seq_no);
   if (len < MINSZ || (len & 15) != (UNENCSZ & 15)) {
-    vlogprintf (E_WARNING, "Incorrect packet from server. Closing connection\n");
+    vlogprintf (E_WARNING, ">> Incorrect packet from server. Closing connection\n");
     fail_connection (TLS, c);
     return -1;
   }
   assert (len >= MINSZ && (len & 15) == (UNENCSZ & 15));
   struct tgl_dc *DC = TLS->net_methods->get_dc (c);
   if (enc->auth_key_id != DC->temp_auth_key_id && enc->auth_key_id != DC->auth_key_id) {
-    vlogprintf (E_WARNING, "received msg from dc %d with auth_key_id %" INT64_PRINTF_MODIFIER "d (perm_auth_key_id %" INT64_PRINTF_MODIFIER "d temp_auth_key_id %" INT64_PRINTF_MODIFIER "d). Dropping\n",
+    vlogprintf (E_WARNING, ">> received msg from dc %d with auth_key_id %" INT64_PRINTF_MODIFIER "d (perm_auth_key_id %" INT64_PRINTF_MODIFIER "d temp_auth_key_id %" INT64_PRINTF_MODIFIER "d). Dropping\n",
     DC->id, enc->auth_key_id, DC->auth_key_id, DC->temp_auth_key_id);
     return 0;
   }
@@ -1069,7 +1073,7 @@ static int process_rpc_message (struct tgl_state *TLS, struct connection *c, str
   assert (l == len - UNENCSZ);
 
   if (!(!(enc->msg_len & 3) && enc->msg_len > 0 && enc->msg_len <= len - MINSZ && len - MINSZ - enc->msg_len <= 12)) {
-    vlogprintf (E_WARNING, "Incorrect packet from server. Closing connection\n");
+    vlogprintf (E_WARNING, ">> Incorrect packet from server. Closing connection\n");
     fail_connection (TLS, c);
     return -1;
   }
@@ -1077,14 +1081,14 @@ static int process_rpc_message (struct tgl_state *TLS, struct connection *c, str
 
   struct tgl_session *S = TLS->net_methods->get_session (c);
   if (!S || S->session_id != enc->session_id) {
-    vlogprintf (E_WARNING, "Message to bad session. Drop.\n");
+    vlogprintf (E_WARNING, ">> Message to bad session. Drop.\n");
     return 0;
   }
 
   static unsigned char sha1_buffer[20];
   TGLC_sha1 ((void *)&enc->server_salt, enc->msg_len + (MINSZ - UNENCSZ), sha1_buffer);
   if (memcmp (&enc->msg_key, sha1_buffer + 4, 16)) {
-    vlogprintf (E_WARNING, "Incorrect packet from server. Closing connection\n");
+    vlogprintf (E_WARNING, ">> Incorrect packet from server. Closing connection\n");
     fail_connection (TLS, c);
     return -1;
   }
@@ -1094,7 +1098,7 @@ static int process_rpc_message (struct tgl_state *TLS, struct connection *c, str
   if (!S->received_messages) {
     DC->server_time_delta = this_server_time - get_utime (CLOCK_REALTIME);
     if (DC->server_time_udelta) {
-      vlogprintf (E_WARNING, "adjusting CLOCK_MONOTONIC delta to %lf\n",
+      vlogprintf (E_WARNING, ">> adjusting CLOCK_MONOTONIC delta to %lf\n",
           DC->server_time_udelta - this_server_time + get_utime (CLOCK_MONOTONIC));
     }
     DC->server_time_udelta = this_server_time - get_utime (CLOCK_MONOTONIC);
@@ -1102,7 +1106,7 @@ static int process_rpc_message (struct tgl_state *TLS, struct connection *c, str
 
   double st = get_server_time (DC);
   if (this_server_time < st - 300 || this_server_time > st + 30) {
-    vlogprintf (E_WARNING, "bad msg time: salt = %" INT64_PRINTF_MODIFIER "d, session_id = %" INT64_PRINTF_MODIFIER "d, msg_id = %" INT64_PRINTF_MODIFIER "d, seq_no = %d, st = %lf, now = %lf\n", enc->server_salt, enc->session_id, enc->msg_id, enc->seq_no, st, get_utime (CLOCK_REALTIME));
+    vlogprintf (E_WARNING, ">> bad msg time: salt = %" INT64_PRINTF_MODIFIER "d, session_id = %" INT64_PRINTF_MODIFIER "d, msg_id = %" INT64_PRINTF_MODIFIER "d, seq_no = %d, st = %lf, now = %lf\n", enc->server_salt, enc->session_id, enc->msg_id, enc->seq_no, st, get_utime (CLOCK_REALTIME));
     fail_session (TLS, S);
     return -1;
   }
@@ -1114,7 +1118,7 @@ static int process_rpc_message (struct tgl_state *TLS, struct connection *c, str
 
   assert (this_server_time >= st - 300 && this_server_time <= st + 30);
   //assert (enc->msg_id > server_last_msg_id && (enc->msg_id & 3) == 1);
-  vlogprintf (E_DEBUG, "received mesage id %016" INT64_PRINTF_MODIFIER "x\n", enc->msg_id);
+
   //server_last_msg_id = enc->msg_id;
 
   //*(long long *)(longpoll_query + 3) = *(long long *)((char *)(&enc->msg_id) + 0x3c);
@@ -1125,6 +1129,13 @@ static int process_rpc_message (struct tgl_state *TLS, struct connection *c, str
 
   in_ptr = enc->message;
   in_end = in_ptr + (enc->msg_len / 4);
+
+  {
+    char msg_code_buf[32] = {0};
+    tgl_code_to_str(msg_code_buf, 32, prefetch_int());
+    vlogprintf (E_DEBUG, ">> received msg_id %016" INT64_PRINTF_MODIFIER "x, seq_no %x, type \"%s\", %d bytes, session %" INT64_PRINTF_MODIFIER "x, salt %" INT64_PRINTF_MODIFIER "x\n",
+                enc->msg_id, enc->seq_no, msg_code_buf, enc->msg_len, enc->session_id, enc->server_salt);
+  }
 
   if (enc->msg_id & 1) {
     tgln_insert_msg_id (TLS, S, enc->msg_id);
@@ -1151,7 +1162,7 @@ static int rpc_execute (struct tgl_state *TLS, struct connection *c, int op, int
   int Response_len = len;
 
   static char Response[MAX_RESPONSE_SIZE];
-  vlogprintf (E_DEBUG, "Response_len = %d\n", Response_len);
+  // vlogprintf (E_DEBUG, "Response_len = %d\n", Response_len);
   assert (TLS->net_methods->read_in (c, Response, Response_len) == Response_len);
 
 #if !defined(__MACH__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined (__CYGWIN__)
@@ -1313,10 +1324,12 @@ static int send_all_acks (struct tgl_state *TLS, struct tgl_session *S) {
   out_int (CODE_msgs_ack);
   out_int (CODE_vector);
   out_int (tree_count_long (S->ack_tree));
+  vlogprintf (E_DEBUG, "  Preparing msgs_ack vector: \n");
   while (S->ack_tree) {
     long long x = tree_get_min_long (S->ack_tree);
     out_long (x);
     S->ack_tree = tree_delete_long (S->ack_tree, x);
+    vlogprintf (E_DEBUG, "  - %016" INT64_PRINTF_MODIFIER "x\n", x);
   }
   tglmp_encrypt_send_message (TLS, S->c, packet_buffer, packet_ptr - packet_buffer, 0);
   return 0;

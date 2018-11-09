@@ -126,8 +126,8 @@ static void delete_connection_buffer (struct connection_buffer *b) {
 }
 
 int tgln_write_out (struct connection *c, const void *_data, int len) {
-  struct tgl_state *TLS = c->TLS;
-  vlogprintf (E_DEBUG, "write_out: %d bytes\n", len);
+  // struct tgl_state *TLS = c->TLS;
+  // vlogprintf (E_DEBUG, "write_out: %d bytes\n", len);
   const unsigned char *data = _data;
   if (!len) { return 0; }
   assert (len > 0);
@@ -423,7 +423,7 @@ static void fail_connection (struct connection *c) {
 //extern FILE *log_net_f;
 static void try_write (struct connection *c) {
   struct tgl_state *TLS = c->TLS;
-  vlogprintf (E_DEBUG, "try write: fd = %d\n", c->fd);
+  // vlogprintf (E_DEBUG, "try write: fd = %d\n", c->fd);
   int x = 0;
   while (c->out_head) {
     int r = write (c->fd, c->out_head->rptr, c->out_head->wptr - c->out_head->rptr);
@@ -449,7 +449,7 @@ static void try_write (struct connection *c) {
       }
     }
   }
-  vlogprintf (E_DEBUG, "Sent %d bytes to %d\n", x, c->fd);
+  // vlogprintf (E_DEBUG, "Sent %d bytes to %d\n", x, c->fd);
   c->out_bytes -= x;
 }
 
@@ -493,7 +493,7 @@ static void try_rpc_read (struct connection *c) {
 
 static void try_read (struct connection *c) {
   struct tgl_state *TLS = c->TLS;
-  vlogprintf (E_DEBUG, "try read: fd = %d\n", c->fd);
+  // vlogprintf (E_DEBUG, "try read: fd = %d\n", c->fd);
   if (!c->in_tail) {
     c->in_head = c->in_tail = new_connection_buffer (1 << 20);
   }
@@ -528,7 +528,7 @@ static void try_read (struct connection *c) {
       }
     }
   }
-  vlogprintf (E_DEBUG, "Received %d bytes from %d\n", x, c->fd);
+  // vlogprintf (E_DEBUG, "Received %d bytes from %d\n", x, c->fd);
   c->in_bytes += x;
   if (x) {
     try_rpc_read (c);
